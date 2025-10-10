@@ -1,103 +1,245 @@
-import Image from "next/image";
+"use client";
+
+import { useState, useEffect, useRef } from "react";
+import Script from "next/script";
 
 export default function Home() {
-  return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [situation, setSituation] = useState("Global economic summit in crisis");
+  const [tweet, setTweet] = useState("");
+  const [responses, setResponses] = useState<any>(null);
+  const [gdp, setGdp] = useState(100); // start GDP at 100 (trillion, index)
+  const [loading, setLoading] = useState(false);
+  const [tweetPosted, setTweetPosted] = useState(false);
+  const [displayGdp, setDisplayGdp] = useState(100);
+  const [gdpAnimating, setGdpAnimating] = useState(false);
+  // Removed Puter SDK dependencies - using fallback mode only
+  const pointsSoundRef = useRef<HTMLAudioElement>(null);
+  const bgMusicRef = useRef<HTMLAudioElement>(null);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+  // Animate GDP changes
+  useEffect(() => {
+    const animateGdp = () => {
+      const diff = gdp - displayGdp;
+      if (Math.abs(diff) > 0.1) {
+        setDisplayGdp(prev => prev + diff * 0.1);
+      } else {
+        setDisplayGdp(gdp);
+      }
+    };
+    
+    const interval = setInterval(animateGdp, 50);
+    return () => clearInterval(interval);
+  }, [gdp, displayGdp]);
+
+  // Play sound and animate when GDP changes
+  useEffect(() => {
+    if (pointsSoundRef.current && gdp !== 100) {
+      setGdpAnimating(true);
+      pointsSoundRef.current.currentTime = 0;
+      pointsSoundRef.current.play().catch(console.log);
+      setTimeout(() => setGdpAnimating(false), 500);
+      
+      // Stop the sound after it plays
+      setTimeout(() => {
+        if (pointsSoundRef.current) {
+          pointsSoundRef.current.pause();
+          pointsSoundRef.current.currentTime = 0;
+        }
+      }, 1000);
+    }
+  }, [gdp]);
+
+  // Groq AI integration using your existing API
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    
+    setLoading(true);
+    setResponses(null);
+
+    const prompt = `Situation: ${situation}
+User's Tweet: "${tweet}"
+
+You are a geopolitical AI analyzing how world leaders would respond to this tweet and its economic impact. Return ONLY a valid JSON object with this exact structure:
+
+{
+  "responses": {
+    "President Xi": "Response from Chinese President",
+    "Prime Minister Modi": "Response from Indian Prime Minister", 
+    "Chancellor Merkel": "Response from German Chancellor"
+  },
+  "gdp_impact": {
+    "direction": "increase" or "decrease",
+    "amount_trillion": number between 0.5 and 5.0
+  }
+}
+
+Make the responses realistic, diplomatic, and varied. Consider the tweet's content when determining GDP impact.`;
+
+    try {
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messages: [
+            {
+              role: 'user',
+              content: prompt
+            }
+          ],
+          temperature: 0.7
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`API request failed: ${response.status}`);
+      }
+
+      // Handle streaming response
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let fullResponse = '';
+
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          
+          const chunk = decoder.decode(value);
+          fullResponse += chunk;
+        }
+      }
+
+      // Parse the JSON response
+      const parsed = JSON.parse(fullResponse);
+      setResponses(parsed);
+
+      // animate GDP change
+      const amt = parsed.gdp_impact?.amount_trillion ?? 0;
+      const dir = parsed.gdp_impact?.direction === "decrease" ? -1 : 1;
+      setGdp((prev) => prev + dir * amt);
+      setTweetPosted(true);
+    } catch (err) {
+      console.error("AI error", err);
+      alert("AI processing failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <main className="min-h-screen" style={{ background: 'var(--background)' }}>
+      {/* No external dependencies */}
+
+      <div className="arcade-border">
+        <div className="arcade-container">
+          {/* Game Title */}
+          <h1 className="text-center text-2xl font-bold mb-6" style={{ color: 'var(--foreground)' }}>
+            tweeter
+          </h1>
+
+          {/* Current Scenario */}
+          <div className="mb-6 p-3" style={{ background: 'var(--border-blue)', border: '2px solid var(--foreground)' }}>
+            <h2 className="text-sm font-bold mb-2">Current Situation:</h2>
+            <p className="text-xs leading-relaxed">{situation}</p>
+          </div>
+
+          {/* Tweet Input */}
+          {!tweetPosted && (
+            <div className="mb-6">
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <textarea
+                  className="arcade-input"
+                  placeholder="What's happening?"
+                  value={tweet}
+                  onChange={(e) => setTweet(e.target.value)}
+                  required
+                  rows={3}
+                  maxLength={280}
+                />
+                <div className="flex justify-between items-center">
+                  <span className="text-xs" style={{ color: 'var(--foreground)' }}>{tweet.length}/280</span>
+                  <button
+                    type="submit"
+                    className="arcade-button"
+                    disabled={loading}
+                  >
+                    {loading ? "thinking..." : "twit"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {/* Posted Tweet Display */}
+          {tweetPosted && (
+            <div className="mb-6">
+              <div className="tweet-box">
+                <div className="flex items-start mb-3">
+                  <div className="avatar mr-3">P</div>
+                  <div className="flex-1">
+                    <div className="font-bold text-sm">President</div>
+                    <div className="text-xs opacity-70">@USPresident</div>
+                  </div>
+                </div>
+                <p className="text-sm mb-3">{tweet}</p>
+                <div className="flex space-x-4 text-xs">
+                  <span>Likes: {Math.floor(Math.random() * 50) + 10}</span>
+                  <span>Comments: {Math.floor(Math.random() * 20) + 5}</span>
+                  <span>Retweets: {Math.floor(Math.random() * 100) + 25}</span>
+                </div>
+              </div>
+              
+              {/* DONE Button */}
+              <div className="text-center mt-4">
+                <button 
+                  className="arcade-button"
+                  onClick={() => {
+                    setTweetPosted(false);
+                    setTweet("");
+                    setResponses(null);
+                  }}
+                >
+                  done
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Country Responses */}
+          {responses && (
+            <div className="mb-6">
+              <h2 className="text-sm font-bold mb-3">World Leaders Respond:</h2>
+              <div className="space-y-3">
+                {Object.entries(responses.responses || {}).map(([leader, msg], index) => (
+                  <div key={leader} className="tweet-box">
+                    <div className="flex items-start mb-2">
+                      <div className="avatar mr-3" style={{ background: ['#ff6b6b', '#4ecdc4', '#45b7d1'][index] }}>
+                        {leader.charAt(0)}
+                      </div>
+                      <div className="flex-1">
+                        <div className="font-bold text-sm">{leader}</div>
+                        <div className="text-xs opacity-70">Country Leader</div>
+                      </div>
+                    </div>
+                    <p className="text-sm">{String(msg)}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* GDP Counter */}
+          <div className={`gdp-display ${gdpAnimating ? 'gdp-animated' : ''}`}>
+            ${displayGdp.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
+          </div>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+      </div>
+
+      {/* Audio Elements */}
+      <audio ref={bgMusicRef} src="/music/bgmusic.wav" loop />
+      <audio ref={pointsSoundRef} src="/music/points.mp3" />
+    </main>
   );
 }
