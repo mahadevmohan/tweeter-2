@@ -1,9 +1,12 @@
 import { NextRequest } from "next/server";
-import { groq, type ChatMessage } from "../../../lib/ai";
+import { groq, type ChatMessage, validateApiKey } from "../../../lib/ai";
 
 export const runtime = "nodejs"; 
 
 export async function POST(req: NextRequest) {
+  // Validate API key at runtime, not build time
+  validateApiKey();
+  
   const { messages, temperature = 0.7 } = (await req.json()) as {
     messages: ChatMessage[];
     temperature?: number;
