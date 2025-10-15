@@ -51,11 +51,6 @@ export default function CountryAvatar({ country, size = "md", className, title }
   // Use the correct file naming convention: country_32.png
   const src = `/images/countries/${fileName}_32.png`;
 
-  console.log(`CountryAvatar Debug:`, {
-    country,
-    fileName,
-    src
-  });
 
   return (
     <div
@@ -70,7 +65,6 @@ export default function CountryAvatar({ country, size = "md", className, title }
           src={src}
           alt={`${country} flag`}
           onError={(e) => {
-            console.error(`Failed to load flag image for ${country}:`, src);
             const target = e.currentTarget as HTMLImageElement;
             target.style.display = "none";
             // Show fallback
@@ -80,7 +74,6 @@ export default function CountryAvatar({ country, size = "md", className, title }
             }
           }}
           onLoad={(e) => {
-            console.log(`Successfully loaded flag for ${country}:`, src);
             // Hide fallback when image loads
             const fallback = (e.currentTarget as HTMLImageElement).nextElementSibling as HTMLElement;
             if (fallback) {

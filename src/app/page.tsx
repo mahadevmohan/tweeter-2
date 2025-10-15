@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import Script from "next/script";
 import { pickRandomUnplayed, markPlayed, type Level } from "../../lib/levels";
 import { buildGamePrompt } from "../../lib/prompt";
 import { randomEngagement } from "../../lib/engagement";
@@ -13,7 +12,10 @@ const STARTING_GDP = 29_018_000_000_000;
 export default function Home() {
   const [level, setLevel] = useState<Level | null>(null);
   const [tweet, setTweet] = useState("");
-  const [responses, setResponses] = useState<any>(null);
+  const [responses, setResponses] = useState<{
+    responses: Record<string, string>;
+    gdp_impact: { direction: string; amount_trillion: number };
+  } | null>(null);
   const [engagement, setEngagement] = useState({ likes: 0, retweets: 0, comments: 0 });
   const [displayEngagement, setDisplayEngagement] = useState({ likes: 0, retweets: 0, comments: 0 });
   const [visibleResponses, setVisibleResponses] = useState<Array<{ country: string; message: unknown }>>([]);
@@ -150,9 +152,10 @@ export default function Home() {
     return () => {
       clearTimeout(soundTimer);
       isPlaying = false;
-      if (pointsSoundRef.current) {
-        pointsSoundRef.current.pause();
-        pointsSoundRef.current.currentTime = 0;
+      const currentSound = pointsSoundRef.current;
+      if (currentSound) {
+        currentSound.pause();
+        currentSound.currentTime = 0;
       }
     };
   }, [gdpAnimating, gdp, displayGdp, isMuted]);
